@@ -7,6 +7,7 @@ on:
 
 env:
   PYTHON_VERSION: '3.9'
+  AWS_REGION: 'us-east-1'
 
 jobs:
   deploy:
@@ -16,14 +17,39 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Configure AWS Credentials
+      - name: Configure Source AWS Profile
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1
-          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-access-key-id: ${{ secrets.SOURCE_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.SOURCE_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.SOURCE_AWS_ROLE_ARN }}
           role-duration-seconds: 1200
+          role-session-name: SourceSessionMigration
+
+      - name: Setup Source AWS Profile
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.SOURCE_AWS_ACCESS_KEY_ID }} --profile source-profile
+          aws configure set aws_secret_access_key ${{ secrets.SOURCE_AWS_SECRET_ACCESS_KEY }} --profile source-profile
+          aws configure set region ${{ env.AWS_REGION }} --profile source-profile
+          aws configure set role_arn ${{ secrets.SOURCE_AWS_ROLE_ARN }} --profile source-profile
+
+      - name: Configure Destination AWS Profile
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.DEST_AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.DEST_AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.DEST_AWS_ROLE_ARN }}
+          role-duration-seconds: 1200
+          role-session-name: DestSessionMigration
+
+      - name: Setup Destination AWS Profile
+        run: |
+          aws configure set aws_access_key_id ${{ secrets.DEST_AWS_ACCESS_KEY_ID }} --profile dest-profile
+          aws configure set aws_secret_access_key ${{ secrets.DEST_AWS_SECRET_ACCESS_KEY }} --profile dest-profile
+          aws configure set region ${{ env.AWS_REGION }} --profile dest-profile
+          aws configure set role_arn ${{ secrets.DEST_AWS_ROLE_ARN }} --profile dest-profile
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -37,6 +63,12 @@ jobs:
       - name: Run migration
         run: |
           python aws-sso-export.py \
-            --source-profile default \
-            --dest-profile destination \
+            --source-profile source-profile \
+            --dest-profile dest-profile \
             --output migration.json
+
+      - name: Upload migration report
+        uses: actions/upload-artifact@v3
+        with:
+          name: migration-report
+          path: migration.json
