@@ -14,7 +14,7 @@ env:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: default
+    environment: devops
     
     steps:
       - name: Checkout Repository
